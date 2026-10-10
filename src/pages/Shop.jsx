@@ -8,6 +8,8 @@ import {
   X,
   Check,
   ChevronDown,
+  PackageCheck,
+  ArrowRight,
 } from "lucide-react";
 import { motion } from "motion/react";
 
@@ -211,6 +213,40 @@ function Shop({ theme = "light", onAddToCart }) {
             Find your everyday groceries, provisions, drinks, snacks and
             household essentials.
           </p>
+        </div>
+
+        {/* Existing customer order tracking */}
+        <div
+          className={`mb-8 flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5 ${
+            isDark
+              ? "border-white/10 bg-[#19251d]"
+              : "border-[#dce5d9] bg-[#edf2e8]"
+          }`}
+        >
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#629467]/15 text-[#629467]">
+              <PackageCheck size={21} />
+            </div>
+
+            <div>
+              <h2 className={`text-sm font-bold ${colors.text}`}>
+                Already ordered from us?
+              </h2>
+
+              <p className={`mt-1 text-sm leading-6 ${colors.muted}`}>
+                Use the unique order number sent to your email to track your
+                order.
+              </p>
+            </div>
+          </div>
+
+          <Link
+            to="/track-order"
+            className="inline-flex shrink-0 items-center justify-center gap-2 self-start rounded-xl bg-[#2f6b3b] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#255831] sm:self-center"
+          >
+            Track order
+            <ArrowRight size={15} />
+          </Link>
         </div>
 
         {/* Search */}

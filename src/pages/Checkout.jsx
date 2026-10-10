@@ -68,9 +68,11 @@ function Checkout({ theme = "light" }) {
       nextErrors.fullName = "Please enter your full name.";
     }
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
-      nextErrors.email = "Enter a valid email address.";
-    }
+ 
+if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+  nextErrors.email = "Enter a valid email address.";
+}
+
 
     const phoneDigits = form.phone.replace(/\D/g, "");
     if (phoneDigits.length < 10 || phoneDigits.length > 15) {
@@ -200,6 +202,25 @@ function Checkout({ theme = "light" }) {
           <p className={`mt-3 ${colors.muted}`}>
             Where should we deliver your order?
           </p>
+        </div>
+
+        {/* Existing customer order tracking */}
+        <div
+          className={`mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${
+            isDark
+              ? "border-white/10 bg-[#19251d]"
+              : "border-[#dce5d9] bg-[#edf2e8]"
+          }`}
+        >
+          <p className={`text-sm ${colors.muted}`}>Already placed an order?</p>
+
+          <Link
+            to="/track-order"
+            className="inline-flex items-center gap-2 text-sm font-bold text-[#629467] transition hover:text-[#3f7948] hover:underline"
+          >
+            Track your order
+            <ArrowLeft size={15} className="rotate-180" />
+          </Link>
         </div>
 
         <form

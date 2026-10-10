@@ -43,62 +43,75 @@ export function CartProvider({ children }) {
     }
   }, [items]);
 
-  const addToCart = useCallback((product) => {
-    if (!product || !Number.isFinite(Number(product.price))) return;
+ 
+const addToCart = useCallback((product) => {
+  if (!product || typeof product !== "object") return;
 
-    const productId = String(product.productId ?? product.id ?? "");
-    if (!productId) return;
+  const price = Number(product.price);
+  const productId = String(product.productId ?? product.id ?? "");
+  const name = String(product.name ?? "").trim();
 
-    const variantId = String(product.variantId ?? "default");
-    const id = `${productId}__${variantId}`;
-    const requestedQuantity = Math.max(
-      1,
-      Math.floor(Number(product.quantity) || 1),
-    );
+  if (!productId || !name || !Number.isFinite(price) || price < 0) {
+    return;
+  }
 
-    setItems((currentItems) => {
-      const existing = currentItems.find((item) => item.id === id);
+  const variantId = String(product.variantId ?? "default");
+  const id = `${productId}__${variantId}`;
 
-      if (existing) {
-        return currentItems.map((item) =>
-          item.id === id
-            ? { ...item, quantity: item.quantity + requestedQuantity }
-            : item,
-        );
-      }
+  const requestedQuantity = Math.max(
+    1,
+    Math.floor(Number(product.quantity) || 1),
+  );
 
-      return [
-        ...currentItems,
-        {
-          id,
-          productId,
-          variantId,
-          name: product.name,
-          size: product.size ?? product.unit ?? "",
-          price: Number(product.price),
-          image: product.image ?? "",
-          quantity: requestedQuantity,
-        },
-      ];
-    });
-  }, []);
+  setItems((currentItems) => {
+    const existing = currentItems.find((item) => item.id === id);
 
-  const updateQuantity = useCallback((id, quantity) => {
-    const nextQuantity = Math.floor(Number(quantity));
-
-    if (!Number.isFinite(nextQuantity)) return;
-
-    if (nextQuantity <= 0) {
-      setItems((currentItems) => currentItems.filter((item) => item.id !== id));
-      return;
+    if (existing) {
+      return currentItems.map((item) =>
+        item.id === id
+          ? { ...item, quantity: item.quantity + requestedQuantity }
+          : item,
+      );
     }
 
-    setItems((currentItems) =>
-      currentItems.map((item) =>
-        item.id === id ? { ...item, quantity: nextQuantity } : item,
-      ),
-    );
-  }, []);
+    return [
+      ...currentItems,
+      {
+        id,
+        productId,
+        variantId,
+        name,
+        size: product.size ?? product.unit ?? "",
+        price,
+        image: product.image ?? "",
+        quantity: requestedQuantity,
+      },
+    ];
+  });
+}, []);
+
+
+
+const updateQuantity = useCallback((id, quantity) => {
+  const nextQuantity = Math.floor(Number(quantity));
+
+  if (!Number.isFinite(nextQuantity)) return;
+
+  setItems((currentItems) =>
+    currentItems.flatMap((item) => {
+      if (item.id !== id) return [item];
+
+      if (nextQuantity <= 0) return [];
+
+      if (Number.isInteger(item.stock) && nextQuantity > item.stock) {
+        return [item];
+      }
+
+      return [{ ...item, quantity: nextQuantity }];
+    }),
+  );
+}, []);
+
 
   const removeFromCart = useCallback((id) => {
     setItems((currentItems) => currentItems.filter((item) => item.id !== id));

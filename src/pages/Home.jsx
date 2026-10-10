@@ -9,6 +9,7 @@ import {
   Truck,
 } from "lucide-react";
 import { motion } from "motion/react";
+import OrderTrackingBanner from "../components/common/OrderTrackingBanner";
 
 const categories = [
   { id: "groceries", name: "Groceries", emoji: "🥬" },
@@ -18,48 +19,58 @@ const categories = [
   { id: "household", name: "Household", emoji: "🧼" },
 ];
 
+
 const featuredProducts = [
   {
     id: "rice",
+    variantId: "rice-50kg",
     name: "Premium Rice",
     category: "Groceries",
     price: 85000,
     unit: "50 kg bag",
+    size: "50 kg",
     image:
       "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=700&q=85",
     label: "Customer favourite",
   },
   {
     id: "oil",
+    variantId: "oil-5l",
     name: "Cooking Oil",
     category: "Groceries",
     price: 12500,
     unit: "5 litres",
+    size: "5 litres",
     image:
       "https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=700&q=85",
     label: "Everyday essential",
   },
   {
     id: "cereal",
+    variantId: "cereal-large",
     name: "Breakfast Cereal",
     category: "Provisions",
     price: 6500,
-    unit: "Per pack",
+    unit: "Family pack",
+    size: "Family pack",
     image:
       "https://images.unsplash.com/photo-1517093157656-b9eccef91cb1?auto=format&fit=crop&w=700&q=85",
     label: "Stock up",
   },
   {
     id: "biscuits",
+    variantId: "default",
     name: "Crunchy Biscuits",
     category: "Snacks",
     price: 1200,
     unit: "Per pack",
+    size: "Per pack",
     image:
       "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=700&q=85",
     label: "Something tasty",
   },
 ];
+
 
 const formatPrice = (price) =>
   new Intl.NumberFormat("en-NG", {
@@ -326,6 +337,8 @@ function Home({ theme = "light", onAddToCart }) {
           </div>
         </div>
       </section>
+
+      <OrderTrackingBanner theme={theme} />
 
       {/* Promotional banner */}
       <section className="px-4 pb-16 sm:px-6 lg:px-8">
