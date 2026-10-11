@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -9,130 +9,211 @@ import {
   ShoppingBag,
   ShieldCheck,
   Truck,
+  PackageCheck,
+  AlertCircle,
 } from "lucide-react";
 import { motion } from "motion/react";
 
-const sampleProducts = [
-  {
-    id: "rice",
-    name: "Premium Rice",
-    categoryId: "groceries",
-    categoryName: "Groceries",
-    description:
-      "Quality rice for everyday meals and family occasions. Choose the pack size that suits your household.",
-    image:
-      "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=1200&q=85",
-    variants: [
-      { id: "rice-1kg", size: "1 kg", price: 2200, stock: 20 },
-      { id: "rice-5kg", size: "5 kg", price: 10500, stock: 12 },
-      { id: "rice-10kg", size: "10 kg", price: 20500, stock: 8 },
-      { id: "rice-50kg", size: "50 kg", price: 85000, stock: 4 },
-    ],
-  },
-  {
-    id: "oil",
-    name: "Cooking Oil",
-    categoryId: "groceries",
-    categoryName: "Groceries",
-    description:
-      "Cooking oil for your everyday kitchen needs. Select the available size before adding it to your cart.",
-    image:
-      "https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=1200&q=85",
-    variants: [
-      { id: "oil-1l", size: "1 litre", price: 2800, stock: 18 },
-      { id: "oil-3l", size: "3 litres", price: 7600, stock: 10 },
-      { id: "oil-5l", size: "5 litres", price: 12500, stock: 6 },
-    ],
-  },
-  {
-    id: "cereal",
-    name: "Breakfast Cereal",
-    categoryId: "provisions",
-    categoryName: "Provisions",
-    description:
-      "A convenient breakfast cupboard staple. Choose your preferred pack size.",
-    image:
-      "https://images.unsplash.com/photo-1517093157656-b9eccef91cb1?auto=format&fit=crop&w=1200&q=85",
-    variants: [
-      { id: "cereal-small", size: "Small pack", price: 2500, stock: 15 },
-      { id: "cereal-large", size: "Family pack", price: 6500, stock: 7 },
-    ],
-  },
-];
+import { getProductById } from "../services/productService";
 
 const formatPrice = (price) =>
   new Intl.NumberFormat("en-NG", {
     style: "currency",
     currency: "NGN",
     maximumFractionDigits: 0,
-  }).format(price);
+  }).format(Number(price) || 0);
+
+function getProductImage(product) {
+  return (
+    product?.image ||
+    product?.imageUrl ||
+    product?.imageURL ||
+    (Array.isArray(product?.images) ? product.images[0] : "") ||
+    ""
+  );
+}
+
+function normalizeProduct(result) {
+  const stockValue = result.stock ?? result.quantityInStock ?? result.inventory;
+  const stock =
+    typeof stockValue === "number" && Number.isFinite(stockValue)
+      ? stockValue
+      : null;
+
+  return {
+    ...result,
+    id: result.id,
+    name: String(result.name || result.title || "Unnamed product"),
+    price: Number(result.price),
+    categoryName:
+      result.categoryName ||
+      result.category?.name ||
+      (typeof result.category === "string" ? result.category : "") ||
+      "JK3 Foods",
+    description: String(result.description || "").trim(),
+    image: getProductImage(result),
+    unit: result.unit || result.size || result.packaging || "",
+    stock,
+    inStock:
+      typeof result.inStock === "boolean"
+        ? result.inStock
+        : stock === null
+          ? true
+          : stock > 0,
+    featured: Boolean(result.featured),
+  };
+}
 
 function ProductDetails({ theme = "light", onAddToCart }) {
   const { productId } = useParams();
-  const isDark = theme === "dark";
 
-  const product = sampleProducts.find((item) => item.id === productId);
-
-  const [selectedVariantId, setSelectedVariantId] = useState("");
+  const [product, setProduct] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
+
+  const isDark = theme === "dark";
 
   const colors = {
     text: isDark ? "text-[#f4f5ef]" : "text-[#203b2b]",
     muted: isDark ? "text-[#b8c6b5]" : "text-[#6b7968]",
     surface: isDark ? "bg-[#1b261e]" : "bg-[#eef2e8]",
     card: isDark ? "border-white/10 bg-[#202a22]" : "border-[#e5e9df] bg-white",
+    subtle: isDark ? "bg-white/5" : "bg-[#f7f9f4]",
   };
 
-  if (!product) {
-    return (
-      <main
-        className={`flex min-h-[65vh] flex-col items-center justify-center px-5 text-center ${colors.text}`}
-      >
-        <ShoppingBag size={42} className="text-[#629467]" />
-        <h1 className="mt-5 text-2xl font-black">Product not found</h1>
-        <p className={`mt-2 ${colors.muted}`}>
-          This product may have been removed or the link may be incorrect.
-        </p>
-        <Link
-          to="/shop"
-          className="mt-6 rounded-full bg-[#47784a] px-6 py-3 font-bold text-white"
-        >
-          Return to shop
-        </Link>
-      </main>
-    );
-  }
+  useEffect(() => {
+    let isMounted = true;
 
-  const selectedVariant =
-    product.variants.find((variant) => variant.id === selectedVariantId) ??
-    product.variants[0];
+    async function loadProduct() {
+      try {
+        setLoading(true);
+        setError("");
+        setProduct(null);
+        setQuantity(1);
+        setAdded(false);
 
-  const stock = selectedVariant.stock;
-  const canAdd = stock > 0 && quantity <= stock;
-  const total = selectedVariant.price * quantity;
+        const result = await getProductById(productId);
+
+        if (!isMounted) return;
+
+        if (!result) {
+          setError("We couldn't find this product. It may have been removed.");
+          return;
+        }
+
+        if (result.isActive !== true) {
+          setError("This product is currently unavailable.");
+          return;
+        }
+
+        const normalized = normalizeProduct(result);
+
+        if (!Number.isFinite(normalized.price) || normalized.price < 0) {
+          setError(
+            "This product has an invalid price. Please contact JK3 Foods.",
+          );
+          return;
+        }
+
+        setProduct(normalized);
+      } catch (err) {
+        console.error("Failed to load product details:", err);
+
+        if (isMounted) {
+          setError(
+            "We couldn't load this product right now. Please try again.",
+          );
+        }
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    if (productId) {
+      loadProduct();
+    } else {
+      setError("No product was specified.");
+      setLoading(false);
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [productId]);
+
+  const outOfStock = Boolean(product) && !product.inStock;
+  const stock = product?.stock ?? null;
+
+  const canAdd =
+    Boolean(product) &&
+    Number.isFinite(product.price) &&
+    product.price >= 0 &&
+    !outOfStock &&
+    (stock === null || quantity <= stock);
+
+  const subtotal = (product?.price || 0) * quantity;
 
   function handleAddToCart() {
-    if (!canAdd) return;
+    if (!canAdd || !product) return;
 
     onAddToCart?.({
+      id: product.id,
       productId: product.id,
-      variantId: selectedVariant.id,
+      variantId: "default",
       name: product.name,
-      size: selectedVariant.size,
-      price: selectedVariant.price,
+      size: product.unit || "",
+      price: product.price,
       image: product.image,
       quantity,
     });
 
     setAdded(true);
-    window.setTimeout(() => setAdded(false), 1800);
+    // The button feedback resets on its own; no timer is needed for cart state.
+    setTimeout(() => setAdded(false), 1800);
   }
 
-  function changeVariant(variant) {
-    setSelectedVariantId(variant.id);
-    setQuantity(1);
-    setAdded(false);
+  if (loading) {
+    return (
+      <main
+        className={`flex min-h-[65vh] items-center justify-center px-5 ${colors.text}`}
+      >
+        <div className="text-center">
+          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-[#629467]/20 border-t-[#629467]" />
+          <p className={`mt-4 text-sm ${colors.muted}`}>
+            Loading product details...
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  if (error || !product) {
+    const unavailable = error === "This product is currently unavailable.";
+
+    return (
+      <main
+        className={`flex min-h-[65vh] flex-col items-center justify-center px-5 text-center ${colors.text}`}
+      >
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#629467]/10 text-[#629467]">
+          {unavailable ? <AlertCircle size={34} /> : <ShoppingBag size={34} />}
+        </div>
+        <h1 className="mt-5 text-2xl font-black">
+          {unavailable ? "Product unavailable" : "Product not found"}
+        </h1>
+        <p className={`mt-2 max-w-md leading-7 ${colors.muted}`}>
+          {error || "This product could not be found."}
+        </p>
+        <Link
+          to="/shop"
+          className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#47784a] px-6 py-3 font-bold text-white transition hover:bg-[#38653c]"
+        >
+          <ArrowLeft size={17} />
+          Return to shop
+        </Link>
+      </main>
+    );
   }
 
   return (
@@ -140,9 +221,9 @@ function ProductDetails({ theme = "light", onAddToCart }) {
       className={`min-h-screen px-4 py-8 sm:px-6 sm:py-12 lg:px-8 ${colors.text}`}
     >
       <div className="mx-auto max-w-7xl">
-        {/* Breadcrumb */}
         <nav
-          className={`mb-8 flex flex-wrap items-center gap-2 text-sm ${colors.muted}`}
+          aria-label="Breadcrumb"
+          className={`mb-7 flex flex-wrap items-center gap-2 text-sm ${colors.muted}`}
         >
           <Link to="/" className="transition hover:text-[#629467]">
             Home
@@ -152,132 +233,132 @@ function ProductDetails({ theme = "light", onAddToCart }) {
             Shop
           </Link>
           <ChevronRight size={15} />
-          <span className={colors.text}>{product.name}</span>
+          <span className={`max-w-[55vw] truncate ${colors.text}`}>
+            {product.name}
+          </span>
         </nav>
 
-        {/* Product details */}
-        <div className="grid items-start gap-10 lg:grid-cols-2 lg:gap-16">
-          <motion.div
-            initial={{ opacity: 0, y: 15 }}
+        <div className="grid items-start gap-8 lg:grid-cols-2 lg:gap-14">
+          <motion.section
+            initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45 }}
+            transition={{ duration: 0.4 }}
           >
             <div
-              className={`overflow-hidden rounded-[2rem] border ${colors.card}`}
+              className={`relative overflow-hidden rounded-[2rem] border ${colors.card}`}
             >
-              <img
-                src={product.image}
-                alt={product.name}
-                className="aspect-square w-full object-cover"
-              />
+              {product.image ? (
+                <img
+                  src={product.image}
+                  alt={product.name}
+                  className="aspect-square max-h-[680px] w-full object-cover"
+                />
+              ) : (
+                <div className="flex aspect-square max-h-[680px] w-full items-center justify-center bg-gradient-to-br from-[#edf4e8] to-[#f9fbf6] text-[#47784a]">
+                  <ShoppingBag size={64} strokeWidth={1.5} />
+                </div>
+              )}
+
+              {product.featured && (
+                <span className="absolute left-4 top-4 rounded-full bg-white px-4 py-2 text-xs font-bold text-[#203b2b] shadow-sm">
+                  Featured product
+                </span>
+              )}
+
+              {outOfStock && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/45">
+                  <span className="rounded-full bg-white px-5 py-3 text-sm font-bold text-[#203b2b]">
+                    Currently out of stock
+                  </span>
+                </div>
+              )}
             </div>
 
             <div
-              className={`mt-4 flex items-center gap-3 rounded-2xl p-4 ${colors.surface}`}
+              className={`mt-4 flex items-start gap-3 rounded-2xl p-4 sm:p-5 ${colors.surface}`}
             >
-              <ShieldCheck className="shrink-0 text-[#629467]" size={24} />
+              <ShieldCheck
+                className="mt-0.5 shrink-0 text-[#629467]"
+                size={24}
+              />
               <div>
                 <p className="font-bold">Shop with confidence</p>
-                <p className={`mt-1 text-sm ${colors.muted}`}>
-                  Product availability and pricing are shown for your selected
-                  size.
+                <p className={`mt-1 text-sm leading-6 ${colors.muted}`}>
+                  Product details and pricing are provided by JK3 Foods. If you
+                  have a question about this item, contact us before ordering.
                 </p>
               </div>
             </div>
-          </motion.div>
+          </motion.section>
 
-          <motion.div
-            initial={{ opacity: 0, y: 15 }}
+          <motion.section
+            initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: 0.1 }}
+            transition={{ duration: 0.4, delay: 0.08 }}
+            className="lg:pt-3"
           >
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#629467]">
-              {product.categoryName}
-            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-[#629467]/10 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.14em] text-[#629467]">
+                {product.categoryName}
+              </span>
+              {product.inStock && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+                  <Check size={13} />
+                  In stock
+                </span>
+              )}
+            </div>
 
-            <h1 className="mt-3 text-3xl font-black leading-tight sm:text-4xl lg:text-5xl">
+            <h1 className="mt-4 text-3xl font-black leading-tight tracking-tight sm:text-4xl lg:text-5xl">
               {product.name}
             </h1>
 
-            <p className={`mt-5 leading-8 ${colors.muted}`}>
-              {product.description}
-            </p>
-
-            {/* Dynamic price */}
-            <div className={`mt-7 rounded-2xl p-5 ${colors.surface}`}>
-              <p className={`text-sm ${colors.muted}`}>
-                Price for {selectedVariant.size}
-              </p>
-              <motion.p
-                key={selectedVariant.id}
-                initial={{ opacity: 0.5, y: 5 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mt-1 text-3xl font-black text-[#629467] sm:text-4xl"
+            {product.description ? (
+              <p
+                className={`mt-5 whitespace-pre-line text-sm leading-7 sm:text-base sm:leading-8 ${colors.muted}`}
               >
-                {formatPrice(selectedVariant.price)}
-              </motion.p>
-              <p className={`mt-2 text-sm ${colors.muted}`}>
-                {stock > 0 ? `${stock} available` : "Currently out of stock"}
+                {product.description}
               </p>
+            ) : (
+              <p className={`mt-5 text-sm leading-7 ${colors.muted}`}>
+                A quality everyday essential from JK3 Foods.
+              </p>
+            )}
+
+            <div
+              className={`mt-7 rounded-2xl border p-5 sm:p-6 ${colors.card}`}
+            >
+              <p className={`text-sm ${colors.muted}`}>
+                {product.unit ? `Price per ${product.unit}` : "Product price"}
+              </p>
+              <p className="mt-1 text-3xl font-black text-[#629467] sm:text-4xl">
+                {formatPrice(product.price)}
+              </p>
+              <div
+                className={`mt-4 flex flex-wrap items-center gap-2 text-sm ${outOfStock ? "text-red-500" : colors.muted}`}
+              >
+                <PackageCheck size={17} />
+                {outOfStock
+                  ? "This item is currently unavailable."
+                  : stock !== null
+                    ? `${stock} ${stock === 1 ? "unit" : "units"} available`
+                    : "Available to order"}
+              </div>
             </div>
 
-            {/* Size selector */}
-            <section className="mt-8">
-              <h2 className="text-sm font-bold">Choose a size</h2>
-
-              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {product.variants.map((variant) => {
-                  const active = selectedVariant.id === variant.id;
-
-                  return (
-                    <button
-                      key={variant.id}
-                      type="button"
-                      onClick={() => changeVariant(variant)}
-                      aria-pressed={active}
-                      className={`relative rounded-2xl border p-4 text-left transition ${
-                        active
-                          ? "border-[#47784a] bg-[#47784a]/10 ring-1 ring-[#47784a]"
-                          : isDark
-                            ? "border-white/10 hover:border-[#629467]"
-                            : "border-[#dfe5d9] hover:border-[#629467]"
-                      }`}
-                    >
-                      {active && (
-                        <Check
-                          size={16}
-                          className="absolute right-3 top-3 text-[#629467]"
-                        />
-                      )}
-
-                      <span className="block text-sm font-bold">
-                        {variant.size}
-                      </span>
-
-                      <span className={`mt-2 block text-sm ${colors.muted}`}>
-                        {formatPrice(variant.price)}
-                      </span>
-
-                      <span
-                        className={`mt-2 block text-xs ${
-                          variant.stock > 0 ? "text-[#629467]" : "text-red-500"
-                        }`}
-                      >
-                        {variant.stock > 0 ? "In stock" : "Out of stock"}
-                      </span>
-                    </button>
-                  );
-                })}
+            <section className="mt-7">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-sm font-bold">Quantity</h2>
+                {stock !== null && (
+                  <span className={`text-xs ${colors.muted}`}>
+                    Maximum: {stock}
+                  </span>
+                )}
               </div>
-            </section>
-
-            {/* Quantity selector */}
-            <section className="mt-8">
-              <h2 className="text-sm font-bold">Quantity</h2>
 
               <div className="mt-3 flex flex-wrap items-center gap-4">
                 <div
-                  className={`flex items-center rounded-full border p-1 ${colors.card}`}
+                  className={`inline-flex items-center rounded-full border p-1 ${colors.card}`}
                 >
                   <button
                     type="button"
@@ -286,23 +367,25 @@ function ProductDetails({ theme = "light", onAddToCart }) {
                     onClick={() =>
                       setQuantity((current) => Math.max(1, current - 1))
                     }
-                    className="rounded-full p-2.5 transition hover:bg-[#47784a]/10 disabled:opacity-40"
+                    className="rounded-full p-2.5 transition hover:bg-[#47784a]/10 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <Minus size={17} />
                   </button>
-
                   <span className="min-w-10 text-center font-bold">
                     {quantity}
                   </span>
-
                   <button
                     type="button"
                     aria-label="Increase quantity"
-                    disabled={quantity >= stock}
+                    disabled={stock !== null && quantity >= stock}
                     onClick={() =>
-                      setQuantity((current) => Math.min(stock, current + 1))
+                      setQuantity((current) =>
+                        stock === null
+                          ? current + 1
+                          : Math.min(stock, current + 1),
+                      )
                     }
-                    className="rounded-full p-2.5 transition hover:bg-[#47784a]/10 disabled:opacity-40"
+                    className="rounded-full p-2.5 transition hover:bg-[#47784a]/10 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <Plus size={17} />
                   </button>
@@ -311,45 +394,43 @@ function ProductDetails({ theme = "light", onAddToCart }) {
                 <p className={`text-sm ${colors.muted}`}>
                   Subtotal:{" "}
                   <span className={`font-bold ${colors.text}`}>
-                    {formatPrice(total)}
+                    {formatPrice(subtotal)}
                   </span>
                 </p>
               </div>
             </section>
 
-            {/* Add to cart */}
             <button
               type="button"
               onClick={handleAddToCart}
               disabled={!canAdd}
-              className="mt-8 flex w-full items-center justify-center gap-3 rounded-full bg-[#47784a] px-6 py-4 font-bold text-white transition hover:bg-[#38653c] disabled:cursor-not-allowed disabled:opacity-50"
+              className="mt-7 flex w-full items-center justify-center gap-3 rounded-full bg-[#47784a] px-6 py-4 font-bold text-white shadow-sm transition hover:bg-[#38653c] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
             >
               {added ? <Check size={20} /> : <ShoppingBag size={20} />}
               {added
                 ? "Added to cart"
-                : stock <= 0
+                : outOfStock
                   ? "Out of stock"
-                  : !canAdd
-                    ? "Quantity exceeds available stock"
-                    : "Add to cart"}
+                  : "Add to cart"}
             </button>
 
             <div
-              className={`mt-5 flex items-start gap-3 text-sm ${colors.muted}`}
+              className={`mt-5 flex items-start gap-3 rounded-2xl p-4 ${colors.subtle} ${colors.muted}`}
             >
               <Truck size={20} className="mt-0.5 shrink-0 text-[#629467]" />
-              <p>
+              <p className="text-sm leading-6">
                 Delivery options and fees will be displayed during checkout.
               </p>
             </div>
 
             <Link
               to="/shop"
-              className="mt-8 inline-flex items-center gap-2 text-sm font-bold text-[#629467] hover:underline"
+              className="mt-7 inline-flex items-center gap-2 text-sm font-bold text-[#629467] transition hover:gap-3"
             >
-              <ArrowLeft size={17} /> Continue shopping
+              <ArrowLeft size={17} />
+              Continue shopping
             </Link>
-          </motion.div>
+          </motion.section>
         </div>
       </div>
     </main>
