@@ -230,7 +230,7 @@ function App() {
                   path="products/new"
                   element={<AdminProductForm theme={theme} />}
                 />
-                ```jsx
+              
                 <Route
                   path="products/:productId/edit"
                   element={<AdminProductForm theme={theme} />}
